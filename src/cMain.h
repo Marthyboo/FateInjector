@@ -22,6 +22,8 @@ public:
 	wxFileDialog *openDialog = nullptr;
 	taskBarIcon taskBarControl;
 	wxNotificationMessage *notification = nullptr;
+	wxTimer autoInjectTimer;
+	DWORD lastAutoInjectedProcId = 0;
 
 public:
 	static void OnInjectButtonExecute(wxCommandEvent &evt, cMain *ref);
@@ -31,13 +33,16 @@ public:
 
 	void OnCustomCheckBox(wxCommandEvent &evt);
 	void OnAutoCheckBox(wxCommandEvent &evt);
+	void OnAutoInjectTimer(wxTimerEvent& evt);
 
 	void onTaskBarDClick(wxCommandEvent &evt);
 
 	wxDECLARE_EVENT_TABLE();
 
 public:
-	bool loopInject();
 	void disableAutoInject();
+	bool InjectCurrentTarget(bool autoInjectMode, DWORD* injectedProcId = nullptr);
+	int GetValidatedDelaySeconds();
+	void SaveCurrentConfig();
 	friend taskBarIcon::taskBarIcon();
 };
