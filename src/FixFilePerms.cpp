@@ -13,8 +13,13 @@
 #include <Aclapi.h>
 #include <Sddl.h>
 
-void SetAccessControl(std::wstring &ExecutableName, const wchar_t* AccessString)
+bool SetAccessControl(const std::wstring& ExecutableName, const wchar_t* AccessString, DWORD* win32Error)
 {
+	if (win32Error != nullptr)
+	{
+		*win32Error = 0;
+	}
+
 	PSECURITY_DESCRIPTOR SecurityDescriptor = nullptr;
 	EXPLICIT_ACCESSW ExplicitAccess = { 0 };
 
@@ -23,9 +28,9 @@ void SetAccessControl(std::wstring &ExecutableName, const wchar_t* AccessString)
 
 	SECURITY_INFORMATION SecurityInfo = DACL_SECURITY_INFORMATION;
 	PSID SecurityIdentifier = nullptr;
+	bool success = false;
 
-	if (
-		GetNamedSecurityInfoW(
+	DWORD getInfoResult = GetNamedSecurityInfoW(
 			ExecutableName.c_str(),
 			SE_FILE_OBJECT,
 			DACL_SECURITY_INFORMATION,
@@ -34,10 +39,16 @@ void SetAccessControl(std::wstring &ExecutableName, const wchar_t* AccessString)
 			&AccessControlCurrent,
 			nullptr,
 			&SecurityDescriptor
-		) == ERROR_SUCCESS
-		)
+		);
+	if (getInfoResult == ERROR_SUCCESS)
 	{
-		ConvertStringSidToSidW(AccessString, &SecurityIdentifier);
+		if (!ConvertStringSidToSidW(AccessString, &SecurityIdentifier))
+		{
+			if (win32Error != nullptr)
+			{
+				*win32Error = GetLastError();
+			}
+		}
 		if (SecurityIdentifier != nullptr)
 		{
 			ExplicitAccess.grfAccessPermissions = GENERIC_READ | GENERIC_EXECUTE;
@@ -47,16 +58,15 @@ void SetAccessControl(std::wstring &ExecutableName, const wchar_t* AccessString)
 			ExplicitAccess.Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
 			ExplicitAccess.Trustee.ptstrName = reinterpret_cast<wchar_t*>(SecurityIdentifier);
 
-			if (
-				SetEntriesInAclW(
+			DWORD aclResult = SetEntriesInAclW(
 					1,
 					&ExplicitAccess,
 					AccessControlCurrent,
 					&AccessControlNew
-				) == ERROR_SUCCESS
-				)
+				);
+			if (aclResult == ERROR_SUCCESS)
 			{
-				SetNamedSecurityInfoW(
+				DWORD setInfoResult = SetNamedSecurityInfoW(
 					const_cast<wchar_t*>(ExecutableName.c_str()),
 					SE_FILE_OBJECT,
 					SecurityInfo,
@@ -65,9 +75,23 @@ void SetAccessControl(std::wstring &ExecutableName, const wchar_t* AccessString)
 					AccessControlNew,
 					nullptr
 				);
+				success = (setInfoResult == ERROR_SUCCESS);
+				if (!success && win32Error != nullptr)
+				{
+					*win32Error = setInfoResult;
+				}
+			}
+			else if (win32Error != nullptr)
+			{
+				*win32Error = aclResult;
 			}
 		}
 	}
+	else if (win32Error != nullptr)
+	{
+		*win32Error = getInfoResult;
+	}
+
 	if (SecurityDescriptor)
 	{
 		LocalFree(reinterpret_cast<HLOCAL>(SecurityDescriptor));
@@ -76,4 +100,10 @@ void SetAccessControl(std::wstring &ExecutableName, const wchar_t* AccessString)
 	{
 		LocalFree(reinterpret_cast<HLOCAL>(AccessControlNew));
 	}
+	if (SecurityIdentifier)
+	{
+		LocalFree(reinterpret_cast<HLOCAL>(SecurityIdentifier));
+	}
+
+	return success;
 }
