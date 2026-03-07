@@ -5,15 +5,7 @@
 #include <fstream>
 #include <algorithm>
 #include <direct.h>
-
-std::string path;
-
-// Config name and state
-std::wstring name;
-std::wstring value;
-
-// generated Config str
-std::wstring configstr;
+#include <cwctype>
 
 char working_dir[1024];
 bool customProcName = false;
@@ -35,13 +27,15 @@ bool config::loadConfig()
         std::wstring line;
         while (getline(cFile, line))
         {
-            if (line[0] == '#' || line.empty())
+            if (line.empty() || line[0] == L'#')
                 continue;
             size_t delimiterPos = line.find('=');
+            if (delimiterPos == std::wstring::npos)
+            {
+                continue;
+            }
             name = line.substr(0, delimiterPos);
-
             value = line.substr(delimiterPos + 1);
-            // std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return std::tolower(c); });
             analyseState();
         }
         return false;
@@ -71,9 +65,9 @@ bool config::saveConfig()
 
 bool config::analyseBool()
 {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c)
-                   { return std::tolower(c); });
-    if (value == "true" || value == "1")
+    std::transform(value.begin(), value.end(), value.begin(), [](wchar_t c)
+                   { return static_cast<wchar_t>(std::towlower(c)); });
+    if (value == L"true" || value == L"1")
     {
         std::cout << name << " "
                   << "true" << '\n';
@@ -89,7 +83,8 @@ bool config::analyseBool()
 
 int config::analyseInt()
 {
-    if (std::all_of(value.begin(), value.end(), ::isdigit))
+    if (!value.empty() && std::all_of(value.begin(), value.end(), [](wchar_t c)
+                                      { return std::iswdigit(c) != 0; }))
     {
         std::cout << name << " " << value << '\n';
         return std::stoi(value);
@@ -103,19 +98,20 @@ int config::analyseInt()
 
 std::wstring config::makeConfig()
 {
+    std::wstring generatedConfig;
 
-    configstr += L"#Fate Client injector config file\n";
+    generatedConfig += L"#Fate Client injector config file\n";
 
     // customProcName
-    configstr += customProcName == true ? L"customProcName=true\n" : L"customProcName=false\n";
+    generatedConfig += customProcName == true ? L"customProcName=true\n" : L"customProcName=false\n";
     // delaystr
-    configstr += L"delaystr=" + delaystr + '\n';
+    generatedConfig += L"delaystr=" + delaystr + L"\n";
     // dllPath
-    configstr += L"dllPath=" + dllPath + '\n';
+    generatedConfig += L"dllPath=" + dllPath + L"\n";
     // procName
-    configstr += L"procName=" + procName + '\n';
+    generatedConfig += L"procName=" + procName + L"\n";
 
-    return configstr;
+    return generatedConfig;
 }
 
 void config::analyseState()
